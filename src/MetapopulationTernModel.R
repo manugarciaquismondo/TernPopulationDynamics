@@ -84,11 +84,15 @@ known.attractiveness.values = all.pairs.table / colSums(all.pairs.table)
 
 # Obtain 3-year lagged A_i,i values
 
-known.lagged.attractiveness.values = matrix(nrow = nrow(known.attractiveness.values), ncol = ncol(known.attractiveness.values) - 2)
+calculate.attractiveness = function(attractive.matrix, matrix.index) {
+    (attractive.matrix[, matrix.index] + attractive.matrix[, matrix.index - 1] + attractive.matrix[, matrix.index - 2] * .5 + attractive.matrix[, matrix.index - 3] * .25) / 2.5
+}
+
+known.lagged.attractiveness.values = matrix(nrow = nrow(known.attractiveness.values), ncol = ncol(known.attractiveness.values) - 3)
 rownames(known.lagged.attractiveness.values) = rownames(known.attractiveness.values)
-colnames(known.lagged.attractiveness.values) = colnames(known.attractiveness.values)[3:ncol(known.attractiveness.values)]
+colnames(known.lagged.attractiveness.values) = colnames(known.attractiveness.values)[4:ncol(known.attractiveness.values)]
 for (lagged.year.index in 1:ncol(known.lagged.attractiveness.values)) {
-    known.lagged.attractiveness.values[, lagged.year.index] = known.attractiveness.values[, lagged.year.index] * known.attractiveness.values[, lagged.year.index + 1] * known.attractiveness.values[, lagged.year.index + 2]
+    known.lagged.attractiveness.values[, lagged.year.index] = calculate.attractiveness(known.attractiveness.values, lagged.year.index+3)
 }
 
 # Obtain the intrinsic quality of each site
@@ -130,6 +134,7 @@ estimate.fidelity = function(input.quality, ta.value, age.weight) {
 known.sites = rownames(all.pairs.table)
 
 # Initialize data structures
+simulation.years = 50
 
 yearly.fidelity = rep(0, times = length(known.sites))
 BirdsStayingNextYear = BirdsLeavingNextYear = matrix(ncol = length(known.sites), nrow = simulation.years)
@@ -149,7 +154,7 @@ for (t in 1:(simulation.years-1)) {
 
         # Update attractiveness
         known.attractiveness.values = cbind(known.attractiveness.values, yearly.attractiveness)
-        yearly.lagged.attractiveness = known.attractiveness.values[, t] * known.attractiveness.values[, t - 1] * known.attractiveness.values[, t - 2]
+        yearly.lagged.attractiveness = calculate.attractiveness(known.attractiveness.values, t)
         known.lagged.attractiveness.values = cbind(known.lagged.attractiveness.values, yearly.lagged.attractiveness)
         colnames(known.attractiveness.values)[ncol(known.attractiveness.values)] = colnames(known.lagged.attractiveness.values)[ncol(known.lagged.attractiveness.values)] = toString(as.numeric(colnames(known.lagged.attractiveness.values)[ncol(known.lagged.attractiveness.values)])+1)
         
