@@ -1,0 +1,28 @@
+"Origin", "Destination", "1989:1992", "1993", "1994:2001", "2002", "2003:2008"
+"Falkner I., CT", "Great Gull I., NY",0.077,0.047,0.080,0.097,0.062 
+"Great Gull I., NY", "Falkner I., CT",0.022,0.026,0.016,0.004,0.006 
+"Bird I., Marion, MA", "Ram I., Mattapoisett, MA",-1,0.009,0.211,0.114,0.145 
+"Ram I., Mattapoisett, MA", "Bird I., Marion, MA",-1,-1,0.234,0.228,0.197 
+"Bird I., Marion, MA", "Penikese I., Gosnold, MA",-1,-1,-1,0.101,0.035 
+"Penikese I., Gosnold, MA", "Bird I., Marion, MA",-1,-1,-1,-1,0.315 
+"Ram I., Mattapoisett, MA", "Penikese I., Gosnold, MA",-1,-1,-1,0.100,0.029 
+"Penikese I., Gosnold, MA", "Ram I., Mattapoisett, MA",-1,-1,-1,-1,0.384 
+"Falkner I., CT", "Bird I., Marion, MA",0.015,0.078,0.010,0.000,0.012 
+"Bird I., Marion, MA", "Falkner I., CT",0.004,0.000,0.002,0.003,0.000
+"Falkner I., CT", "Ram I., Mattapoisett, MA",-1,0.004,0.009,0.000,0.007 
+"Ram I., Mattapoisett, MA", "Falkner I., CT",-1,-1,0.001,0.000,0.001 
+"Falkner I., CT", "Penikese I., Gosnold, MA",-1,-1,-1,0.017,0.000
+"Penikese I., Gosnold, MA", "Falkner I., CT",-1,-1,-1,-1,0.007 
+"Great Gull I., NY", "Bird I., Marion, MA",0.037,0.064,0.014,0.011,0.007 
+"Bird I., Marion, MA", "Great Gull I., NY",0.021,0.000,0.011,0.004,0.011 
+"Great Gull I., NY", "Ram I., Mattapoisett, MA",-1,0.012,0.014,0.012,0.015 
+"Ram I., Mattapoisett, MA", "Great Gull I., NY",-1,-1,0.018,0.004,0.013 
+"Great Gull I., NY", "Penikese I., Gosnold, MA",-1,-1,-1,0.016,0.008 
+"Penikese I., Gosnold, MA", "Great Gull I., NY",-1,-1,-1,-1,0.026 
+"Falkner I., CT", "Falkner I., CT",0.908,0.871,0.901,0.886,0.919 
+"Great Gull I., NY", "Great Gull I., NY",0.941,0.898,0.956,0.957,0.965 
+"Bird I., Marion, MA", "Bird I., Marion, MA",0.975,0.991,0.774,0.778,0.809 
+"Ram I., Mattapoisett, MA", "Ram I., Mattapoisett, MA",-1,-1,0.746,0.669,0.759 
+"Penikese I., Gosnold, MA", "Penikese I., Gosnold, MA",-1,-1,-1,-1,0.268 
+
+
