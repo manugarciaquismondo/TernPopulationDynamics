@@ -123,6 +123,7 @@ colonization.opportunities[all.pairs.table > 0] = -1
 colonization.opportunities[all.pairs.table == 0] = 1
 colonization.opportunities[colonization.opportunities == -1] = 0
 decolonization.opportunities = 1 - colonization.opportunities
+decolonization.opportunities[large.sites,]=0
 
 # A function to calculate colonization counts
 calculate.colonizations = function(input.matrix, inverse.initial.position) {
@@ -144,10 +145,14 @@ calculate.colonizations = function(input.matrix, inverse.initial.position) {
 count.colonizations = sapply(1:nrow(colonization.opportunities), calculate.colonizations(colonization.opportunities,T))
 count.decolonizations = sapply(1:nrow(decolonization.opportunities), calculate.colonizations(decolonization.opportunities,F))
 names(count.colonizations) = names(count.decolonizations) = rownames(colonization.opportunities)
-colonization.probability = count.colonizations / (rowSums(colonization.opportunities)+1)
+colonization.probability = count.colonizations / (rowSums(colonization.opportunities) + 1)
+#colonization.probability = rep(sum(count.colonizations) / sum((rowSums(colonization.opportunities) + 1)), times = length(count.colonizations))
 decolonization.probability = count.decolonizations / (rowSums(decolonization.opportunities) + 1)
+names(colonization.probability) = names(decolonization.probability) = names(count.colonizations)
 decolonization.probability = decolonization.probability*2
+#decolonization.probability = rep(sum(count.decolonizations) / sum((rowSums(decolonization.opportunities) + 1)), times = length(count.colonizations))*1.7
 colonization.probability[is.infinite(colonization.probability)] = 1
+colonization.probability[large.sites]=1
 decolonization.probability[colonization.probability==1]=0
 # Create colonization matrix
 colonization.probability.matrix = cbind(colonization.probability, decolonization.probability)
@@ -305,14 +310,25 @@ productivity.as.vector = unlist(productivity.known.values)
 productivity.matrix.valid.indexes = productivity.as.vector >= 0
 productivity.as.vector = productivity.as.vector[productivity.matrix.valid.indexes]
 number.of.pairs.as.vector = unlist(productivity.number.of.pairs)[productivity.matrix.valid.indexes]
+intrinsic.quality.as.vector = unlist(matrix(data = intrinsic.quality, nrow = nrow(productivity.number.of.pairs), ncol = ncol(productivity.number.of.pairs)))[productivity.matrix.valid.indexes]
 
+# Calculate productivity correlation per site
+productivity.correlation.per.site=c()
+for (site.index in 1:nrow(productivity.known.values)) {
+    valid.indexes = productivity.known.values[site.index,] > 0
+    if (length(valid.indexes[valid.indexes])>1) {
+        latest.valid.indexes = valid.indexes
+        locale.correlation = cor(unlist(productivity.known.values[site.index, latest.valid.indexes]), unlist(productivity.number.of.pairs[site.index, latest.valid.indexes]))
+        productivity.correlation.per.site = c(productivity.correlation.per.site, locale.correlation)
+    }
+}
 # Create regression model to predict productivity values
-known.productivity.values.matrix = cbind(productivity.as.vector, number.of.pairs.as.vector)
-colnames(known.productivity.values.matrix) = c("Productivity", "Pairs")
+known.productivity.values.matrix = cbind(productivity.as.vector, number.of.pairs.as.vector, intrinsic.quality.as.vector)
+colnames(known.productivity.values.matrix) = c("Productivity", "Pairs", "Quality")
 max.productivity = 2
 known.productivity.values.matrix[, "Productivity"] = known.productivity.values.matrix[, "Productivity"] / max.productivity
 known.productivity.values.matrix = known.productivity.values.matrix[known.productivity.values.matrix[, "Productivity"]>0,]
-productivity.logistic.model = glm(Productivity ~ Pairs, family = gaussian(link = 'logit'), as.data.frame(known.productivity.values.matrix))
+productivity.logistic.model = glm(Productivity ~ Pairs+Quality, family = gaussian(link = 'logit'), as.data.frame(known.productivity.values.matrix))
 
 # Read adult and juvenile fidelity
 
@@ -336,16 +352,22 @@ sd.juvenile.survival = sd(juvenile.survival.data[, 1])
 juvenile.ordered.survival.data = get.named.table("juvenile_ordered_survival.csv")
 colnames(juvenile.ordered.survival.data) = sapply(colnames(juvenile.ordered.survival.data), function(x) gsub("X", "", x))
 juvenile.ordered.survival.data = t(juvenile.ordered.survival.data)
-colnames(juvenile.ordered.survival.data) = c("Falkner I., CT", "Great Gull I., NY", "Bird I., Marion, MA")
-# Create linear model of juvenile survival
+colnames(juvenile.ordered.survival.data) = c("Falkner I., CT", "Bird I., Marion, MA", "Great Gull I., NY")
+# Create logistic regression model of juvenile survival
 
 filtered.survival.juvenile.pairs.for.fidelity = juvenile.pairs.for.fidelity[rownames(juvenile.ordered.survival.data),]
+filtered.survival.juvenile.pairs.for.fidelity = filtered.survival.juvenile.pairs.for.fidelity[, c(1, 3, 2)]
+colnames(filtered.survival.juvenile.pairs.for.fidelity) = colnames(juvenile.ordered.survival.data)
 unlisted.survival.juvenile.pairs = unlist(filtered.survival.juvenile.pairs.for.fidelity)
-unlisted.juvenile.survival = c()
-for (population.name in colnames(juvenile.ordered.survival.data)) unlisted.juvenile.survival = c(unlisted.juvenile.survival, juvenile.ordered.survival.data[, population.name])
-juvenile.survival.matrix = cbind(unlisted.survival.juvenile.pairs, unlisted.juvenile.survival)
-colnames(juvenile.survival.matrix) = c("Pairs", "Survival")
-survival.logistic.model = glm(Survival ~ Pairs, family = gaussian(link = 'logit'), as.data.frame(juvenile.survival.matrix))
+intrinsic.quality.calibration.matrix.survival = intrinsic.quality.calibration.matrix[colnames(juvenile.ordered.survival.data), 1:nrow(juvenile.ordered.survival.data)]
+unlisted.juvenile.survival = unlisted.quality.for.survival = c()
+for (population.name in colnames(juvenile.ordered.survival.data)) {
+    unlisted.quality.for.survival = c(unlisted.quality.for.survival, intrinsic.quality.calibration.matrix.survival[population.name,])
+    unlisted.juvenile.survival = c(unlisted.juvenile.survival, juvenile.ordered.survival.data[, population.name])
+}
+juvenile.survival.matrix = cbind(unlisted.survival.juvenile.pairs, unlisted.juvenile.survival, unlisted.quality.for.survival)
+colnames(juvenile.survival.matrix) = c("Pairs", "Survival", "Quality")
+survival.logistic.model = glm(Survival ~ Pairs+Quality, family = gaussian(link = 'logit'), as.data.frame(juvenile.survival.matrix))
 
 # Select matching adult survival and correlate it with juvenile survival
 
@@ -353,18 +375,39 @@ juvenile.corresponding.survival = t(survival.table[colnames(juvenile.ordered.sur
 unlisted.juvenile.corresponding.survival = c()
 for (population.name in colnames(juvenile.corresponding.survival))
     unlisted.juvenile.corresponding.survival = c(unlisted.juvenile.corresponding.survival, juvenile.corresponding.survival[, population.name])
-cor(unlisted.juvenile.corresponding.survival, unlisted.juvenile.survival)
+juvenile.and.adult.correlation = cor(unlisted.juvenile.corresponding.survival, unlisted.juvenile.survival)
+
 # Initialize data structures
 
 simulation.years = 30
 number.of.sites = length(known.sites)
 yearly.fidelity = rep(0, times = length(known.sites))
 TotalBirdsNextYear = simulation.attractiveness.values = matrix(nrow = number.of.sites, ncol = simulation.years)
-TemporaryDecolonization = ColonizationVector= DecolonizationVector = BirdsStayingNextYear = BirdsLeavingNextYear = ImmigrantsNextYear = JuvenileStaying = JuvenileLeaving = EstimatedProductivity = matrix(nrow = number.of.sites, ncol = simulation.years - 1)
-rownames(TemporaryDecolonization) = rownames(ColonizationVector) = rownames(DecolonizationVector) = rownames(BirdsStayingNextYear) = rownames(BirdsLeavingNextYear) = rownames(TotalBirdsNextYear) = rownames(ImmigrantsNextYear) = rownames(simulation.attractiveness.values) = rownames(JuvenileStaying) = rownames(JuvenileLeaving) = rownames(EstimatedProductivity) = known.sites
-names(yearly.fidelity) = known.sites
-Pool=c()
+NewDecoloners = NewColoners = DeNovoDecolonization = DeNovoColonization = JuvenileSurvival = TemporaryDecolonization = ColonizationVector = DecolonizationVector = BirdsStayingNextYear = BirdsLeavingNextYear = ImmigrantsNextYear = JuvenileStaying = JuvenileLeaving = EstimatedProductivity = matrix(nrow = number.of.sites, ncol = simulation.years - 1)
+rownames(NewDecoloners) = rownames(NewColoners) = rownames(DeNovoDecolonization) = rownames(DeNovoColonization) = names(yearly.fidelity) = known.sites
+Pool = c()
+
+# Collect increases and decreases in colonization/decolonization
+
+colonization.numbers = decolonization.numbers=c()
+for (site.index in rownames(all.pairs.table)[!rownames(all.pairs.table) %in% base.large.sites]) {
+    max.decolonization=0
+    for (year.index in 2:ncol(all.pairs.table)) {
+        max.decolonization = max(max.decolonization, all.pairs.table[site.index, year.index - 1] - all.pairs.table[site.index, year.index])
+        if (all.pairs.table[site.index, year.index - 1] == 0 && all.pairs.table[site.index, year.index] > 0)
+            colonization.numbers = c(colonization.numbers, all.pairs.table[site.index, year.index])
+        }
+    if (max.decolonization>0) decolonization.numbers = c(decolonization.numbers, max.decolonization)
+}
+
+# Calculate parameters for colonization and decolonization distributions
+max.possible.colonization = max(colonization.numbers)
+colonization.probability = median(colonization.numbers) / max.possible.colonization
+
+max.possible.decolonization = max(decolonization.numbers)
+decolonization.probability = median(decolonization.numbers) / max.possible.decolonization
 # Simulate the system
+
 averaged.overall.survival = mean(as.matrix(survival.table))
 TotalBirdsNextYear[, 1] = all.pairs.table[, 1]
 simulation.attractiveness.values[, 1] = known.attractiveness.values[, 1]
@@ -385,16 +428,22 @@ for (t in 1:(simulation.years-1)) {
     colonized.sites = temporal.survivors>= 1
     colonization.probability.sampled.matrix = cbind(runif(number.of.sites), runif(number.of.sites))
     colnames(colonization.probability.sampled.matrix) = c("ColonizationSample", "DecolonizationSample")
-    ColonizationVector[, t] = colonization.probability.sampled.matrix[, "ColonizationSample"] < colonization.probability.matrix[, "Colonization"] | colonized.sites
-    DecolonizationVector[, t] = colonization.probability.sampled.matrix[, "DecolonizationSample"] < colonization.probability.matrix[, "Decolonization"] & colonized.sites
+    current.year.colonization = colonization.probability.sampled.matrix[, "ColonizationSample"] < colonization.probability.matrix[, "Colonization"]
+    DeNovoColonization[, t] = ifelse(current.year.colonization & !colonized.sites, 1, 0)
+    ColonizationVector[, t] = current.year.colonization | colonized.sites
+    current.year.decolonization = colonization.probability.sampled.matrix[, "DecolonizationSample"] < colonization.probability.matrix[, "Decolonization"]
+    DeNovoDecolonization[, t] = ifelse(current.year.decolonization & colonized.sites, 1, 0)
+    DecolonizationVector[, t] = current.year.decolonization & colonized.sites
     colonization.status = ColonizationVector[, t] & !DecolonizationVector[, t]
     colonization.status = ifelse(colonization.status, 1, 0)
     # If the colony will be decolonized, set fidelity to 0
     #yearly.fidelity = ifelse(DecolonizationVector[, t] == 0, yearly.fidelity,0)
     # If decolonization occurs, flag temporary decolonization
     TemporaryDecolonization[, t] = DecolonizationVector[, t] == 1
-    carrying.capacity.threshold = pmin(1, exp( - (carrying.capacity[large.sites] - temporal.survivors[large.sites])))
-    TemporaryDecolonization[large.sites, t] = runif(length(large.sites)) < carrying.capacity.threshold
+
+    # Decolonization for large sites
+    #carrying.capacity.threshold = pmin(1, exp( - (carrying.capacity[large.sites] - temporal.survivors[large.sites])))
+    #TemporaryDecolonization[large.sites, t] = runif(length(large.sites)) < carrying.capacity.threshold
     if (t > 1) {
 
         # Decolonization finishes when the colony has no pairs
@@ -403,12 +452,12 @@ for (t in 1:(simulation.years-1)) {
         
         # Well-known large sites can rebound before total decolonization
 
-        for (large.site in base.large.sites) {
-            if (TemporaryDecolonization[large.site, t - 1]) {
-                site.carrying.capacity.threshold = 1-min(1, exp( - (carrying.capacity[large.site]*.6 - temporal.survivors[large.site])))
-                TemporaryDecolonization[, t] = !(runif(1) < site.carrying.capacity.threshold)
-            }
-        }
+        #for (large.site in base.large.sites) {
+            #if (TemporaryDecolonization[large.site, t - 1]) {
+                #site.carrying.capacity.threshold = 1-min(1, exp( - (carrying.capacity[large.site]*.6 - temporal.survivors[large.site])))
+                #TemporaryDecolonization[, t] = !(runif(1) < site.carrying.capacity.threshold)
+            #}
+        #}
 
     }
 
@@ -418,19 +467,20 @@ for (t in 1:(simulation.years-1)) {
     #}
     colonization.vector = colonization.status * ifelse(!TemporaryDecolonization[, t], 1, 0)
     # Estimate productivity 
-    total.birds.as.matrix = as.data.frame(temporal.survivors)
-    colnames(total.birds.as.matrix) = c("Pairs")
+    total.birds.as.matrix = cbind(as.data.frame(temporal.survivors), intrinsic.quality)
+    colnames(total.birds.as.matrix) = c("Pairs", "Quality")
     EstimatedProductivity[, t] = pmax(0, estimate.regression(total.birds.as.matrix, productivity.logistic.model) * max.productivity)
     # If the colony will be decolonized, do not generate new juveniles
     EstimatedProductivity[, t] = ifelse(!TemporaryDecolonization[, t], EstimatedProductivity[, t], 0)
     # Estimate juvenile survival
-
-    yearly.juvenile.survival = estimate.regression(total.birds.as.matrix, survival.logistic.model)
-    yearly.juvenile.survival = pmax(0,pmin(1,rnorm(number.of.sites, mean = mean.juvenile.survival, sd=sd.juvenile.survival)))
+    total.birds.plus.quality = cbind(total.birds.as.matrix, intrinsic.quality)
+    colnames(total.birds.plus.quality) = c("Pairs", "Quality")
+    JuvenileSurvival[, t] = estimate.regression(total.birds.plus.quality, survival.logistic.model)
+    #yearly.juvenile.survival = pmax(0,pmin(1,rnorm(number.of.sites, mean = mean.juvenile.survival, sd=sd.juvenile.survival)))
     
     # Calculate juvenile product
 
-    juvenile.generated = EstimatedProductivity[, t] * yearly.juvenile.survival * temporal.survivors
+    juvenile.generated = EstimatedProductivity[, t] * JuvenileSurvival[, t] * temporal.survivors
     yearly.fidelity.juvenile.ratio = estimate.regression(total.birds.as.matrix, juvenile.fidelity.logistic.model)
     juvenile.fidelity = yearly.fidelity * yearly.fidelity.juvenile.ratio
     JuvenileStaying[, t] = juvenile.generated * juvenile.fidelity
@@ -439,19 +489,22 @@ for (t in 1:(simulation.years-1)) {
     BirdsStayingNextYear[, t] = temporal.survivors * yearly.fidelity + JuvenileStaying[, t]
 
     BirdsLeavingNextYear[, t] = temporal.survivors * (1 - yearly.fidelity) + JuvenileLeaving[, t]
-
-
+    NewDecoloners[, t] = pmin(BirdsStayingNextYear[, t], rbinom(number.of.sites, max.possible.decolonization, decolonization.probability) * DeNovoDecolonization[, t])
+    BirdsLeavingNextYear[, t] = BirdsLeavingNextYear[, t] + NewDecoloners[, t]
+    BirdsStayingNextYear[, t] = BirdsStayingNextYear[, t] - NewDecoloners[, t]
     # Calculate the migrant pool and immigrants
     year.pool = sum(BirdsLeavingNextYear[, t])
+    NewColoners[, t] = rbinom(number.of.sites, max.possible.colonization, colonization.probability) * DeNovoColonization[, t]
+    year.pool = year.pool - sum(NewColoners[, t])
     Pool = c(Pool, year.pool)
-
+    
     # If any colony receives immigrants, distribute them among the receiving colonies
     if (any(colonization.vector==1)) {
-        ImmigrantsNextYear[, t] = year.pool * calculate.pool.proportion(fidelity.predictor, temporal.survivors, colonization.vector)
+        ImmigrantsNextYear[, t] = year.pool * calculate.pool.proportion(fidelity.predictor, temporal.survivors, colonization.vector * (1-DeNovoColonization[, t]))
     } else {
         ImmigrantsNextYear[, t] = 0 
     }
-
+    ImmigrantsNextYear[, t] = ImmigrantsNextYear[, t] + NewColoners[, t]
     # Calculate total number of birds
     TotalBirdsNextYear[, t + 1] = BirdsStayingNextYear[, t] + ImmigrantsNextYear[, t]
     TotalBirdsNextYear[, t + 1] = randomRound(TotalBirdsNextYear[, t + 1])
