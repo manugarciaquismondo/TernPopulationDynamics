@@ -1,3 +1,8 @@
+# Get parameters from console
+
+output.directory.route = commandArgs(T)[1]
+data.directory.route = commandArgs(T)[2]
+
 
 # Define functions to extend year columns from year ranges
 
@@ -34,11 +39,21 @@ extend.year.matrix = function(input.matrix) {
     year.range.extended
 }
 
-# Set the first column of each table as row name
 
+# Set the data route according to the operating system
+if (Sys.info()['sysname'] == "Windows") {
+    move.to.data.route = function() {
+        new.workspace = Sys.getenv("NEWWORKSPACE")
+        setwd(file.path(new.workspace, "TernModel", "data"))
+    }
+} else {
+    move.to.data.route = function() {
+        setwd(data.directory.route)
+    }
+}
+# Set the first column of each table as row name
 get.named.table = function(table.file.route) {
-    new.workspace = Sys.getenv("NEWWORKSPACE")
-    setwd(file.path(new.workspace, "TernModel", "data"))
+    move.to.data.route()
     input.table = read.csv(table.file.route, header = T)
     site.names = input.table[, 1]
     input.table = input.table[, 2:ncol(input.table)]
@@ -74,24 +89,41 @@ for (site.name in rownames(productivity.estimates)) {
 
 # Read transition probabilities
 
-new.workspace = Sys.getenv("NEWWORKSPACE")
-setwd(file.path(new.workspace, "TernModel", "data"))
+move.to.data.route()
+message("Sited in directory ", getwd())
 transition.probabilities.table = read.csv("transitionprobabilities.csv", header = T, stringsAsFactors = F)
+if (!exists("trimws")) {
+    trimws = function(x, which = c("both", "left", "right")) {
+        which <- match.arg(which)
+        mysub <- function(re, x) sub(re, "", x, perl = TRUE)
+        if (which == "left")
+            return(mysub("^[ \t\r\n]+", x))
+        if (which == "right")
+            return(mysub("[ \t\r\n]+$", x))
+        mysub("[ \t\r\n]+$", mysub("^[ \t\r\n]+", x))
+    }
+}
 transition.probabilities.table[, c("Origin")] = sapply(transition.probabilities.table[, c("Origin")], trimws)
 transition.probabilities.table[, c("Destination")] = sapply(transition.probabilities.table[, c("Destination")], trimws)
 colnames(transition.probabilities.table) = gsub("X", "", colnames(transition.probabilities.table))
-
+message("Transition probability table")
+message(transition.probabilities.table)
 # Extend transition probability table
 
 transition.probabilities.extended = extend.year.matrix(transition.probabilities.table)
 
 
 # Get phi_i,i for all sites
-
+message("Diagonals processed")
+message("Checking origins")
+message(transition.probabilities.table[, "Origin"])
+message("Checking destinations")
+message(transition.probabilities.table[, "Destination"])
 diagonal.sites = matrix(nrow = 0, ncol = ncol(transition.probabilities.table))
 colnames(diagonal.sites) = colnames(transition.probabilities.table)
 for (transition.index in 1:nrow(transition.probabilities.table)) {
     if (transition.probabilities.table[transition.index, "Origin"] == transition.probabilities.table[transition.index, "Destination"]) {
+        message("Origin and destination coincide")
         diagonal.sites = rbind(diagonal.sites, matrix(nrow = 1, ncol = ncol(transition.probabilities.table), data = transition.probabilities.table[transition.index,]))
     }
 }
@@ -101,13 +133,15 @@ for (transition.index in 1:nrow(transition.probabilities.table)) {
 
 # Obtain table with all phi_i,i values
 
-
+message("Diagonal sites")
+message(diagonal.sites)
 year.range.extended = extend.year.matrix(diagonal.sites)
 rownames(year.range.extended) = year.range.extended[, 1]
 year.range.extended = year.range.extended[, 3:ncol(year.range.extended)]
-
+message("Year range extended")
+message(year.range.extended)
 # Obtain all attractiveness (A_i,i) values
-
+message("Calculating colonizations and decolonizations")
 all.pairs.table = read.csv("allpairs.csv", header = T)
 rownames(all.pairs.table) = all.pairs.table[, 1]
 all.pairs.table = all.pairs.table[, 2:ncol(all.pairs.table)]
@@ -115,7 +149,7 @@ colnames(all.pairs.table) = sapply(1988:2015, toString)
 known.attractiveness.values = all.pairs.table / colSums(all.pairs.table)
 
 # Calculate site-specific carrying capacity
-large.sites=read.csv("survivalestimates.csv", header = F, stringsAsFactors = F)[,1]
+large.sites = read.csv("survivalestimates.csv", header = F, stringsAsFactors = F)[, 1]
 carrying.capacity = apply(all.pairs.table, 1, max)
 # Calculate colonization probability
 colonization.opportunities = all.pairs.table
@@ -123,7 +157,7 @@ colonization.opportunities[all.pairs.table > 0] = -1
 colonization.opportunities[all.pairs.table == 0] = 1
 colonization.opportunities[colonization.opportunities == -1] = 0
 decolonization.opportunities = 1 - colonization.opportunities
-decolonization.opportunities[large.sites,]=0
+decolonization.opportunities[large.sites,] = 0
 
 # A function to calculate colonization counts
 calculate.colonizations = function(input.matrix, inverse.initial.position) {
@@ -142,27 +176,27 @@ calculate.colonizations = function(input.matrix, inverse.initial.position) {
         locale.colonizations
     }
 }
-count.colonizations = sapply(1:nrow(colonization.opportunities), calculate.colonizations(colonization.opportunities,T))
-count.decolonizations = sapply(1:nrow(decolonization.opportunities), calculate.colonizations(decolonization.opportunities,F))
+count.colonizations = sapply(1:nrow(colonization.opportunities), calculate.colonizations(colonization.opportunities, T))
+count.decolonizations = sapply(1:nrow(decolonization.opportunities), calculate.colonizations(decolonization.opportunities, F))
 names(count.colonizations) = names(count.decolonizations) = rownames(colonization.opportunities)
 colonization.probability = count.colonizations / (rowSums(colonization.opportunities) + 1)
 #colonization.probability = rep(sum(count.colonizations) / sum((rowSums(colonization.opportunities) + 1)), times = length(count.colonizations))
 decolonization.probability = count.decolonizations / (rowSums(decolonization.opportunities) + 1)
 names(colonization.probability) = names(decolonization.probability) = names(count.colonizations)
-decolonization.probability = decolonization.probability*2
+decolonization.probability = decolonization.probability * 2
 #decolonization.probability = rep(sum(count.decolonizations) / sum((rowSums(decolonization.opportunities) + 1)), times = length(count.colonizations))*1.7
 colonization.probability[is.infinite(colonization.probability)] = 1
-colonization.probability[large.sites]=1
-decolonization.probability[colonization.probability==1]=0
+colonization.probability[large.sites] = 1
+decolonization.probability[colonization.probability == 1] = 0
 # Create colonization matrix
 colonization.probability.matrix = cbind(colonization.probability, decolonization.probability)
-colnames(colonization.probability.matrix)=c("Colonization", "Decolonization")
+colnames(colonization.probability.matrix) = c("Colonization", "Decolonization")
 # Multiply pool subtable by local number of pairs and normalize
-
+message("Pool of suitable sites")
 pool.subtable = pool.subtable.multiplied = subset(transition.probabilities.extended, Origin != Destination)
 for (pool.subtable.year in colnames(pool.subtable)[3:ncol(pool.subtable)]) {
     for (site.name in unique(pool.subtable$Origin)) {
-        origin.name = pool.subtable$Origin == site.name && pool.subtable[, pool.subtable.year]>=0
+        origin.name = pool.subtable$Origin == site.name && pool.subtable[, pool.subtable.year] >= 0
         pool.subtable.multiplied[origin.name, pool.subtable.year] = pool.subtable[origin.name, pool.subtable.year] * all.pairs.table[site.name, pool.subtable.year]
     }
     pool.indexes.positive = pool.subtable.multiplied[, pool.subtable.year] >= 0
@@ -170,7 +204,7 @@ for (pool.subtable.year in colnames(pool.subtable)[3:ncol(pool.subtable)]) {
     pool.subtable.multiplied[pool.indexes.positive, pool.subtable.year] = pool.subtable.multiplied[pool.indexes.positive, pool.subtable.year] / pool.subtable.in.year
     pool.subtable.multiplied[!pool.indexes.positive, pool.subtable.year] = 0
 }
-
+message("Summing of pool of suitable sites")
 # Sum across all instances by destination variable
 pool.subtable.multiplied.sum = pool.subtable.multiplied[, 2:ncol(pool.subtable.multiplied)]
 pool.subtable.multiplied.sum = aggregate(pool.subtable.multiplied.sum[2:ncol(pool.subtable.multiplied.sum)], by = list(Destination = pool.subtable.multiplied.sum$Destination), FUN = function(x) {
@@ -180,7 +214,7 @@ rownames(pool.subtable.multiplied.sum) = pool.subtable.multiplied.sum$Destinatio
 pool.subtable.multiplied.sum = pool.subtable.multiplied.sum[, 2:ncol(pool.subtable.multiplied.sum)]
 #Obtain pool indexes greater than 0
 
-pool.valid.indexes = unlist(pool.subtable.multiplied.sum)>0
+pool.valid.indexes = unlist(pool.subtable.multiplied.sum) > 0
 # Adjust model of pool proportion as a function of attractiveness and quality
 
 # Obtain 3-year lagged A_i,i values
@@ -193,7 +227,7 @@ known.lagged.attractiveness.values = matrix(nrow = nrow(known.attractiveness.val
 rownames(known.lagged.attractiveness.values) = rownames(known.attractiveness.values)
 colnames(known.lagged.attractiveness.values) = colnames(known.attractiveness.values)[4:ncol(known.attractiveness.values)]
 for (lagged.year.index in 1:ncol(known.lagged.attractiveness.values)) {
-    known.lagged.attractiveness.values[, lagged.year.index] = calculate.lagged.attractiveness(known.attractiveness.values, lagged.year.index+3)
+    known.lagged.attractiveness.values[, lagged.year.index] = calculate.lagged.attractiveness(known.attractiveness.values, lagged.year.index + 3)
 }
 
 # Obtain the intrinsic quality of each site
@@ -220,9 +254,10 @@ dated.phi.indexes = which(selected.phi.rows >= 0)
 
 
 #Finally, build the matrix for model regression
-
+message("Building matrix for model regression")
 create.adjustment.matrix = function(dependent.variable.indexes, dependent.variable.vector, dependent.variable.name) {
-
+    message("Dependent variable indexes")
+    message(dependent.variable.indexes)
     # Create vectors for dependent and independent variables
     selected.dependent.vector = dependent.variable.vector[dependent.variable.indexes]
     intrinsic.quality.filtered.calibration = unlist(intrinsic.quality.calibration.matrix)[dependent.variable.indexes]
@@ -230,6 +265,7 @@ create.adjustment.matrix = function(dependent.variable.indexes, dependent.variab
 
     # Create matrix with these vectors
     adjustment.matrix = matrix(nrow = length(intrinsic.quality.filtered.calibration), ncol = 3)
+    message("Internal adjustment matrix")
     colnames(adjustment.matrix) = c("Quality", dependent.variable.name, "TemporalAttractiveness")
     adjustment.matrix[, "Quality"] = intrinsic.quality.filtered.calibration
     adjustment.matrix[, dependent.variable.name] = selected.dependent.vector
@@ -240,9 +276,10 @@ create.adjustment.matrix = function(dependent.variable.indexes, dependent.variab
 create.adjustment.model = function(dependent.variable.indexes, dependent.variable.vector, dependent.variable.name) {
     # Create adjustment matrix
     adjustment.matrix = create.adjustment.matrix(dependent.variable.indexes, dependent.variable.vector, dependent.variable.name)
-
+    message("Adjustment matrix")
+    message(adjustment.matrix)
     # Create logistic model from dependent and independent matrix
-    glm(eval(parse(text=paste(dependent.variable.name,"~ Quality + TemporalAttractiveness"))), family = gaussian(link = 'logit'), data = as.data.frame(adjustment.matrix))
+    glm(eval(parse(text = paste(dependent.variable.name, "~ Quality + TemporalAttractiveness"))), family = gaussian(link = 'logit'), data = as.data.frame(adjustment.matrix))
 
 }
 
@@ -250,11 +287,15 @@ estimate.regression = function(input.data, input.model) {
     predict(input.model, newdata = as.data.frame(input.data), type = 'response')
 }
 
-
+message("Quality model started")
+message("Dated Phi indexes")
+message(dated.phi.indexes)
 # Next, build a logistic regression model
 logistic.quality.model = create.adjustment.model(dated.phi.indexes, selected.phi.rows, "Phi")
-
+message("Quality model finished")
 pool.proportion.model = create.adjustment.model(pool.valid.indexes, unlist(pool.subtable.multiplied.sum), "PoolProportion")
+message("Pool models finished")
+message("Model regression matrices built")
 
 # Calculate the random part of the proportion from the pool as the squared error in the model estimations
 pool.adjustment.matrix = create.adjustment.matrix(pool.valid.indexes, unlist(pool.subtable.multiplied.sum), "PoolProportion")
@@ -270,7 +311,7 @@ calculate.pool.proportion = function(model.parameters, number.of.pairs, colonize
     stochastic.component = rnorm(n = input.number.of.sites, mean = input.pool.proportion.expectancy, sd = input.pool.proportion.sd)
 
     # Penalize the existence of populated colonies according to their closeness to each site
-    pool.proportion.vector = ((1 - input.pool.randomness) * deterministic.component + input.pool.randomness * stochastic.component) * colSums(number.of.pairs*site.distances)
+    pool.proportion.vector = ((1 - input.pool.randomness) * deterministic.component + input.pool.randomness * stochastic.component) * colSums(number.of.pairs * site.distances)
     pool.proportion.vector = pool.proportion.vector * colonized.sites
     pool.proportion.vector / sum(pool.proportion.vector)
 }
@@ -297,8 +338,7 @@ randomRound = function(realNumbers) {
 }
 
 # Read productivity and number of pairs
-new.workspace = Sys.getenv("NEWWORKSPACE")
-setwd(file.path(new.workspace, "TernModel", "data"))
+move.to.data.route()
 productivity.matrix = read.csv("productivities6.csv", header = F)
 
 # Separate in productivity and number of pairs
@@ -313,10 +353,10 @@ number.of.pairs.as.vector = unlist(productivity.number.of.pairs)[productivity.ma
 intrinsic.quality.as.vector = unlist(matrix(data = intrinsic.quality, nrow = nrow(productivity.number.of.pairs), ncol = ncol(productivity.number.of.pairs)))[productivity.matrix.valid.indexes]
 
 # Calculate productivity correlation per site
-productivity.correlation.per.site=c()
+productivity.correlation.per.site = c()
 for (site.index in 1:nrow(productivity.known.values)) {
     valid.indexes = productivity.known.values[site.index,] > 0
-    if (length(valid.indexes[valid.indexes])>1) {
+    if (length(valid.indexes[valid.indexes]) > 1) {
         latest.valid.indexes = valid.indexes
         locale.correlation = cor(unlist(productivity.known.values[site.index, latest.valid.indexes]), unlist(productivity.number.of.pairs[site.index, latest.valid.indexes]))
         productivity.correlation.per.site = c(productivity.correlation.per.site, locale.correlation)
@@ -327,8 +367,8 @@ known.productivity.values.matrix = cbind(productivity.as.vector, number.of.pairs
 colnames(known.productivity.values.matrix) = c("Productivity", "Pairs", "Quality")
 max.productivity = 2
 known.productivity.values.matrix[, "Productivity"] = known.productivity.values.matrix[, "Productivity"] / max.productivity
-known.productivity.values.matrix = known.productivity.values.matrix[known.productivity.values.matrix[, "Productivity"]>0,]
-productivity.logistic.model = glm(Productivity ~ Pairs+Quality, family = gaussian(link = 'logit'), as.data.frame(known.productivity.values.matrix))
+known.productivity.values.matrix = known.productivity.values.matrix[known.productivity.values.matrix[, "Productivity"] > 0,]
+productivity.logistic.model = glm(Productivity ~ Pairs + Quality, family = gaussian(link = 'logit'), as.data.frame(known.productivity.values.matrix))
 
 # Read adult and juvenile fidelity
 
@@ -338,7 +378,7 @@ juvenile.pairs.unlisted = unlist(juvenile.pairs.for.fidelity)
 fidelity.ratio = fidelity.for.juveniles["Juvenile"] / fidelity.for.juveniles["Adult"]
 fidelity.ratio.extended = rep(unlist(fidelity.ratio), each = nrow(juvenile.pairs.for.fidelity))
 fidelity.data.frame = as.data.frame(cbind(juvenile.pairs.unlisted, fidelity.ratio.extended))
-colnames(fidelity.data.frame)=c("Pairs","Fidelity")
+colnames(fidelity.data.frame) = c("Pairs", "Fidelity")
 juvenile.fidelity.logistic.model = glm(Fidelity ~ Pairs, family = gaussian(link = 'logit'), fidelity.data.frame)
 
 # Read juvenile survival distribution
@@ -367,11 +407,11 @@ for (population.name in colnames(juvenile.ordered.survival.data)) {
 }
 juvenile.survival.matrix = cbind(unlisted.survival.juvenile.pairs, unlisted.juvenile.survival, unlisted.quality.for.survival)
 colnames(juvenile.survival.matrix) = c("Pairs", "Survival", "Quality")
-survival.logistic.model = glm(Survival ~ Pairs+Quality, family = gaussian(link = 'logit'), as.data.frame(juvenile.survival.matrix))
+survival.logistic.model = glm(Survival ~ Pairs + Quality, family = gaussian(link = 'logit'), as.data.frame(juvenile.survival.matrix))
 
 # Select matching adult survival and correlate it with juvenile survival
 
-juvenile.corresponding.survival = t(survival.table[colnames(juvenile.ordered.survival.data), sapply(rownames(juvenile.ordered.survival.data), function(x) paste("X",x,sep=""))])
+juvenile.corresponding.survival = t(survival.table[colnames(juvenile.ordered.survival.data), sapply(rownames(juvenile.ordered.survival.data), function(x) paste("X", x, sep = ""))])
 unlisted.juvenile.corresponding.survival = c()
 for (population.name in colnames(juvenile.corresponding.survival))
     unlisted.juvenile.corresponding.survival = c(unlisted.juvenile.corresponding.survival, juvenile.corresponding.survival[, population.name])
@@ -389,16 +429,17 @@ Pool = c()
 
 # Collect increases and decreases in colonization/decolonization
 
-colonization.numbers = decolonization.numbers=c()
-for (site.index in rownames(all.pairs.table)[!rownames(all.pairs.table) %in% base.large.sites]) {
-    max.decolonization=0
+colonization.numbers = decolonization.numbers = c()
+for (site.index in rownames(all.pairs.table)[!rownames(all.pairs.table) %in% large.sites]) {
+    max.decolonization = 0
     for (year.index in 2:ncol(all.pairs.table)) {
         max.decolonization = max(max.decolonization, all.pairs.table[site.index, year.index - 1] - all.pairs.table[site.index, year.index])
         if (all.pairs.table[site.index, year.index - 1] == 0 && all.pairs.table[site.index, year.index] > 0)
             colonization.numbers = c(colonization.numbers, all.pairs.table[site.index, year.index])
         }
-    if (max.decolonization>0) decolonization.numbers = c(decolonization.numbers, max.decolonization)
-}
+    if (max.decolonization > 0)
+        decolonization.numbers = c(decolonization.numbers, max.decolonization)
+    }
 
 # Calculate parameters for colonization and decolonization distributions
 max.possible.colonization = max(colonization.numbers)
@@ -417,15 +458,17 @@ TemporaryDecolonization[, 1] = F
 base.large.sites = large.sites
 large.sites = known.sites
 
-for (t in 1:(simulation.years-1)) {
+message("Simulation started")
+
+for (t in 1:(simulation.years - 1)) {
     # Calculate the fidelity in the current year
     fidelity.predictor = cbind(intrinsic.quality, simulation.attractiveness.values[, t])
-    colnames(fidelity.predictor)=c("Quality", "TemporalAttractiveness")
+    colnames(fidelity.predictor) = c("Quality", "TemporalAttractiveness")
     yearly.fidelity = estimate.regression(fidelity.predictor, logistic.quality.model)
     temporal.survivors = TotalBirdsNextYear[, t] * averaged.overall.survival
 
     # Calculate colonized and decolonized sites
-    colonized.sites = temporal.survivors>= 1
+    colonized.sites = temporal.survivors >= 1
     colonization.probability.sampled.matrix = cbind(runif(number.of.sites), runif(number.of.sites))
     colnames(colonization.probability.sampled.matrix) = c("ColonizationSample", "DecolonizationSample")
     current.year.colonization = colonization.probability.sampled.matrix[, "ColonizationSample"] < colonization.probability.matrix[, "Colonization"]
@@ -449,21 +492,21 @@ for (t in 1:(simulation.years-1)) {
         # Decolonization finishes when the colony has no pairs
 
         TemporaryDecolonization[, t] = (TemporaryDecolonization[, t] | TemporaryDecolonization[, t - 1]) & TotalBirdsNextYear[, t - 1] > 0
-        
+
         # Well-known large sites can rebound before total decolonization
 
         #for (large.site in base.large.sites) {
-            #if (TemporaryDecolonization[large.site, t - 1]) {
-                #site.carrying.capacity.threshold = 1-min(1, exp( - (carrying.capacity[large.site]*.6 - temporal.survivors[large.site])))
-                #TemporaryDecolonization[, t] = !(runif(1) < site.carrying.capacity.threshold)
-            #}
+        #if (TemporaryDecolonization[large.site, t - 1]) {
+        #site.carrying.capacity.threshold = 1-min(1, exp( - (carrying.capacity[large.site]*.6 - temporal.survivors[large.site])))
+        #TemporaryDecolonization[, t] = !(runif(1) < site.carrying.capacity.threshold)
+        #}
         #}
 
     }
 
     ## If all large sites are decolonized, stop decolonization to avoid the collapse of the metapopulation
     #if (all(TemporaryDecolonization[large.sites, t])) {
-        #TemporaryDecolonization[large.sites, t][temporal.survivors[large.sites]<carrying.capacity[large.sites]] = F
+    #TemporaryDecolonization[large.sites, t][temporal.survivors[large.sites]<carrying.capacity[large.sites]] = F
     #}
     colonization.vector = colonization.status * ifelse(!TemporaryDecolonization[, t], 1, 0)
     # Estimate productivity 
@@ -477,7 +520,7 @@ for (t in 1:(simulation.years-1)) {
     colnames(total.birds.plus.quality) = c("Pairs", "Quality")
     JuvenileSurvival[, t] = estimate.regression(total.birds.plus.quality, survival.logistic.model)
     #yearly.juvenile.survival = pmax(0,pmin(1,rnorm(number.of.sites, mean = mean.juvenile.survival, sd=sd.juvenile.survival)))
-    
+
     # Calculate juvenile product
 
     juvenile.generated = EstimatedProductivity[, t] * JuvenileSurvival[, t] * temporal.survivors
@@ -497,27 +540,46 @@ for (t in 1:(simulation.years-1)) {
     NewColoners[, t] = rbinom(number.of.sites, max.possible.colonization, colonization.probability) * DeNovoColonization[, t]
     year.pool = year.pool - sum(NewColoners[, t])
     Pool = c(Pool, year.pool)
-    
+
     # If any colony receives immigrants, distribute them among the receiving colonies
-    if (any(colonization.vector==1)) {
-        ImmigrantsNextYear[, t] = year.pool * calculate.pool.proportion(fidelity.predictor, temporal.survivors, colonization.vector * (1-DeNovoColonization[, t]))
+    if (any(colonization.vector == 1)) {
+        ImmigrantsNextYear[, t] = year.pool * calculate.pool.proportion(fidelity.predictor, temporal.survivors, colonization.vector * (1 - DeNovoColonization[, t]))
     } else {
-        ImmigrantsNextYear[, t] = 0 
+        ImmigrantsNextYear[, t] = 0
     }
     ImmigrantsNextYear[, t] = ImmigrantsNextYear[, t] + NewColoners[, t]
     # Calculate total number of birds
     TotalBirdsNextYear[, t + 1] = BirdsStayingNextYear[, t] + ImmigrantsNextYear[, t]
     TotalBirdsNextYear[, t + 1] = randomRound(TotalBirdsNextYear[, t + 1])
 
-    
+
 
     # Update attractiveness
     sumBirdsStaying = sum(BirdsStayingNextYear[, t])
     yearly.attractiveness = BirdsStayingNextYear[, t] / ifelse(sumBirdsStaying <= 0, 1, sumBirdsStaying)
-    simulation.attractiveness.values[,t+1] = yearly.attractiveness
-    #yearly.lagged.attractiveness = calculate.lagged.attractiveness(known.attractiveness.values, t)
-        #known.lagged.attractiveness.values = cbind(known.lagged.attractiveness.values, yearly.lagged.attractiveness)
-    #colnames(known.lagged.attractiveness.values)[ncol(known.lagged.attractiveness.values)] = toString(as.numeric(colnames(known.lagged.attractiveness.values)[ncol(known.lagged.attractiveness.values)]) + 1)
-        
+    simulation.attractiveness.values[, t + 1] = yearly.attractiveness
 
 }
+
+# Create directory to store the results
+
+dir.create(output.directory.route, showWarnings = FALSE)
+setwd(output.directory.route)
+
+# Store simulation results
+
+write.csv(TotalBirdsNextYear, "TotalBirdsNextYear.csv")
+write.csv(simulation.attractiveness.values, "SiteAttractiveness.csv")
+write.csv(NewDecoloners, "NewDecoloners.csv")
+write.csv(DeNovoColonization, "DeNovoColonization.csv")
+write.csv(DeNovoDecolonization, "DeNovoDecolonization.csv")
+write.csv(JuvenileSurvival, "JuvenileSurvival.csv")
+write.csv(TemporaryDecolonization, "TemporaryDecolonization.csv")
+write.csv(ColonizationVector, "ColonizationVector.csv")
+write.csv(DecolonizationVector, "DecolonizationVector.csv")
+write.csv(BirdsStayingNextYear, "BirdsStayingNextYear.csv")
+write.csv(BirdsLeavingNextYear, "BirdsLeavingNextYear.csv")
+write.csv(ImmigrantsNextYear, "Immigrants.csv")
+write.csv(JuvenileStaying, "JuvenileStaying.csv")
+write.csv(JuvenileLeaving, "JuvenileLeaving.csv")
+write.csv(EstimatedProductivity, "EstimatedProductivity.csv")
