@@ -2,8 +2,9 @@
 
 output.directory.route = commandArgs(T)[1]
 data.directory.route = commandArgs(T)[2]
+simulation.years = as.numeric(commandArgs(T)[3])
 
-
+#output.directory.route = "C:/Users/manu_/localdata/workspaces/eclipse/newworkspace/TernModel/results"
 # Define functions to extend year columns from year ranges
 
 year.range = function(year.range.string) {
@@ -419,7 +420,6 @@ juvenile.and.adult.correlation = cor(unlisted.juvenile.corresponding.survival, u
 
 # Initialize data structures
 
-simulation.years = 30
 number.of.sites = length(known.sites)
 yearly.fidelity = rep(0, times = length(known.sites))
 TotalBirdsNextYear = simulation.attractiveness.values = matrix(nrow = number.of.sites, ncol = simulation.years)

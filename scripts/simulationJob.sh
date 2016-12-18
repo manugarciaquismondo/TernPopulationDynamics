@@ -30,5 +30,6 @@ DATA_FOLDER=$1
 RESULTS_FOLDER=$2
 BASE_FOLDER=$3
 SIMULATION_OUTPUT=$4
-echo "Reading the data from "${DATA_FOLDER}" and writing the results into "${RESULTS_FOLDER}". Base folder is "${BASE_FOLDER}". Output file is "${SIMULATION_OUTPUT}"."
-Rscript ${BASE_FOLDER}/MetapopulationTernModel.R ${RESULTS_FOLDER} ${DATA_FOLDER} &> ${SIMULATION_OUTPUT}
+SIMULATION_YEARS=$5
+echo "Reading the data from "${DATA_FOLDER}" and writing the results into "${RESULTS_FOLDER}". Base folder is "${BASE_FOLDER}". Output file is "${SIMULATION_OUTPUT}". Simulation years is "${SIMULATION_YEARS}
+Rscript ${BASE_FOLDER}/MetapopulationTernModel.R ${RESULTS_FOLDER} ${DATA_FOLDER} ${SIMULATION_YEARS} &> ${SIMULATION_OUTPUT}
