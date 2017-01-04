@@ -1,0 +1,1 @@
+Rscript ../r-scripts/saveMetrics.R ~/tern-metapopulation/statistics ~/tern-metapopulation/metrics

@@ -3,7 +3,9 @@
 output.directory.route = commandArgs(T)[1]
 data.directory.route = commandArgs(T)[2]
 simulation.years = as.numeric(commandArgs(T)[3])
-
+if (is.na(simulation.years))
+    simulation.years= 50
+    
 #output.directory.route = "C:/Users/manu_/localdata/workspaces/eclipse/newworkspace/TernModel/results"
 # Define functions to extend year columns from year ranges
 
@@ -441,6 +443,61 @@ for (site.index in rownames(all.pairs.table)[!rownames(all.pairs.table) %in% lar
         decolonization.numbers = c(decolonization.numbers, max.decolonization)
     }
 
+# Calculate large and small colonizations
+
+# First, cluster between large colonizations and small colonizations
+clustering.results = kmeans(colonization.numbers, centers = 2)
+cluster.category = clustering.results$cluster
+if (clustering.results$centers[1] > clustering.results$centers[2]) {
+    large.colonizations.index = 1
+    small.colonizations.index = 2
+} else {
+    large.colonizations.index = 2
+    small.colonizations.index = 1
+}
+
+large.colonizations = colonization.numbers[cluster.category == large.colonizations.index]
+small.colonizations = colonization.numbers[cluster.category == small.colonizations.index]
+
+# Then, calculate the proportion of large and small colonizations
+
+proportion.of.large.colonizations = length(large.colonizations) / length(colonization.numbers)
+proportion.of.small.colonizations = 1 - proportion.of.large.colonizations
+
+proportion.of.small.colonizations = proportion.of.small.colonizations*1.05
+
+# Finally, calculate the distribution parameters for large and small colonizations
+
+mean.large.colonizations = mean(large.colonizations)
+sd.large.colonizations = sd(large.colonizations)
+mean.small.colonizations = mean(small.colonizations)
+sd.small.colonizations = sd(small.colonizations)
+
+# A function to generate an item from a mixed component in a Gaussian model
+mixed.component.item = function(input.mean, input.sd) {
+    #component.item = rnorm(1, mean = input.mean, sd = input.sd)
+    component.item = rpois(1, lambda = round(input.mean))
+    # If the component is lower than 0, rebound using mean
+    if (component.item < 0) {
+        component.item = 1
+    }
+    component.item
+}
+
+# Generate colonizations from a mixed Gaussian model of large and small colonizations
+calculate.colonization.distribution = function(input.number.of.sites = number.of.sites) {
+    colonization.elements = runif(input.number.of.sites)
+
+    # Generate colonizations from the mixed Gaussian model
+    round(sapply(1:input.number.of.sites, function(x) {
+        if (colonization.elements[x] <= proportion.of.small.colonizations) {
+            mixed.component.item(mean.small.colonizations, sd.small.colonizations)
+        } else {
+            mixed.component.item(mean.large.colonizations, sd.large.colonizations)
+        }
+    }))
+
+}
 # Calculate parameters for colonization and decolonization distributions
 max.possible.colonization = max(colonization.numbers)
 colonization.probability = median(colonization.numbers) / max.possible.colonization
@@ -532,12 +589,16 @@ for (t in 1:(simulation.years - 1)) {
     BirdsStayingNextYear[, t] = temporal.survivors * yearly.fidelity + JuvenileStaying[, t]
 
     BirdsLeavingNextYear[, t] = temporal.survivors * (1 - yearly.fidelity) + JuvenileLeaving[, t]
-    NewDecoloners[, t] = pmin(BirdsStayingNextYear[, t], rbinom(number.of.sites, max.possible.decolonization, decolonization.probability) * DeNovoDecolonization[, t])
+    NewDecoloners[, t] = round(pmin(BirdsStayingNextYear[, t], rbinom(number.of.sites, max.possible.decolonization, decolonization.probability) * DeNovoDecolonization[, t]))
     BirdsLeavingNextYear[, t] = BirdsLeavingNextYear[, t] + NewDecoloners[, t]
     BirdsStayingNextYear[, t] = BirdsStayingNextYear[, t] - NewDecoloners[, t]
     # Calculate the migrant pool and immigrants
     year.pool = sum(BirdsLeavingNextYear[, t])
-    NewColoners[, t] = rbinom(number.of.sites, max.possible.colonization, colonization.probability) * DeNovoColonization[, t]
+    #NewColoners[, t] = rbinom(number.of.sites, max.possible.colonization, colonization.probability) * DeNovoColonization[, t]
+
+    # Update colonization distribution
+    NewColoners[, t] = calculate.colonization.distribution(number.of.sites) * DeNovoColonization[, t]
+
     year.pool = year.pool - sum(NewColoners[, t])
     Pool = c(Pool, year.pool)
 
@@ -561,16 +622,18 @@ for (t in 1:(simulation.years - 1)) {
 
 }
 
+message("Simulation finished")
 # Create directory to store the results
 
 dir.create(output.directory.route, showWarnings = FALSE)
 setwd(output.directory.route)
-
+message("Writing simulation results")
 # Store simulation results
 
 write.csv(TotalBirdsNextYear, "TotalBirdsNextYear.csv")
 write.csv(simulation.attractiveness.values, "SiteAttractiveness.csv")
 write.csv(NewDecoloners, "NewDecoloners.csv")
+write.csv(NewColoners, "NewColoners.csv")
 write.csv(DeNovoColonization, "DeNovoColonization.csv")
 write.csv(DeNovoDecolonization, "DeNovoDecolonization.csv")
 write.csv(JuvenileSurvival, "JuvenileSurvival.csv")
@@ -583,3 +646,4 @@ write.csv(ImmigrantsNextYear, "Immigrants.csv")
 write.csv(JuvenileStaying, "JuvenileStaying.csv")
 write.csv(JuvenileLeaving, "JuvenileLeaving.csv")
 write.csv(EstimatedProductivity, "EstimatedProductivity.csv")
+message("Simulation results written")
