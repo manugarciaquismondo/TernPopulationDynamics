@@ -1,11 +1,37 @@
+# Use library for truncated normal distribution
+
+library(truncnorm)
+
 # Get parameters from console
 
-output.directory.route = commandArgs(T)[1]
-data.directory.route = commandArgs(T)[2]
-simulation.years = as.numeric(commandArgs(T)[3])
+trailing.arguments = commandArgs(T)
+output.directory.route = trailing.arguments[1]
+data.directory.route = trailing.arguments[2]
+simulation.years = as.numeric(trailing.arguments[3])
 if (is.na(simulation.years))
     simulation.years= 50
-    
+
+# If a scale factor for juvenile survival has been introduced, read it
+
+if(length(trailing.arguments)>3){
+  juvenile.survival.scale.factor=as.numeric(trailing.arguments[4])
+} else {
+  juvenile.survival.scale.factor=1
+}
+
+# Check Juvenile Survival distribution parameters
+if(length(trailing.arguments)>4){
+  juvenile.survival.mean = as.numeric(trailing.arguments[5])
+  juvenile.survival.sd = as.numeric(trailing.arguments[6])
+  estimate.juvenile.survival = function(total.birds.plus.quality, survival.logistic.model){
+    rtruncnorm(nrow(total.birds.plus.quality), a=0, b=1, mean=juvenile.survival.mean, sd=juvenile.survival.sd)
+  }
+} else {
+  estimate.juvenile.survival = function(total.birds.plus.quality, survival.logistic.model){
+    estimate.regression(total.birds.plus.quality, survival.logistic.model)
+  }
+}
+
 #output.directory.route = "C:/Users/manu_/localdata/workspaces/eclipse/newworkspace/TernModel/results"
 # Define functions to extend year columns from year ranges
 
@@ -575,7 +601,7 @@ for (t in 1:(simulation.years - 1)) {
     # Estimate juvenile survival
     total.birds.plus.quality = cbind(total.birds.as.matrix, intrinsic.quality)
     colnames(total.birds.plus.quality) = c("Pairs", "Quality")
-    JuvenileSurvival[, t] = estimate.regression(total.birds.plus.quality, survival.logistic.model)
+    JuvenileSurvival[, t] = estimate.juvenile.survival(total.birds.plus.quality, survival.logistic.model)*juvenile.survival.scale.factor
     #yearly.juvenile.survival = pmax(0,pmin(1,rnorm(number.of.sites, mean = mean.juvenile.survival, sd=sd.juvenile.survival)))
 
     # Calculate juvenile product
