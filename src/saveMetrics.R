@@ -28,7 +28,7 @@ check.large.colony=function(input.table, input.large.stable.years=large.stable.y
 }
 
 # Initialize structures for simulation metrics
-simulation.min.values = simulation.max.values = c()
+simulation.min.values = simulation.max.values = simulation.min.values.large.colonies = simulation.max.values.large.colonies = c()
 proportion.large.colonies=c()
 colonization.numbers=decolonization.numbers=c()
 final.large.colonies=final.medium.colonies=c()
@@ -42,6 +42,11 @@ for(simulation in list.dirs(recursive = F)){
     minMaxTable=read.csv("MinMaxPairs.csv", header=T)
     simulation.min.values=c(simulation.min.values,minMaxTable[1,2])
     simulation.max.values=c(simulation.max.values,minMaxTable[2,2])
+    
+    # Register maximum and minimum number of pairs in large colonies across all years
+    minMaxTableLargeColonies=read.csv("MinMaxPairsLargeColonies.csv", header=T)
+    simulation.min.values.large.colonies=c(simulation.min.values.large.colonies,minMaxTableLargeColonies[1,2])
+    simulation.max.values.large.colonies=c(simulation.max.values.large.colonies,minMaxTableLargeColonies[2,2])
     
     # Register number of pairs after colonization and before decolonization
     colonization.table=read.csv("ColonizationEvents.csv", header = T)[,-1]
@@ -65,6 +70,8 @@ for(simulation in list.dirs(recursive = F)){
 setwd(destination.directory)
 write.csv(simulation.min.values, "minValues.csv")
 write.csv(simulation.max.values, "maxValues.csv")
+write.csv(simulation.min.values.large.colonies, "minValuesLargeColonies.csv")
+write.csv(simulation.max.values.large.colonies, "maxValuesLargeColonies.csv")
 write.csv(colonization.numbers, "colonizations.csv")
 write.csv(decolonization.numbers, "decolonizations.csv")
 write.csv(proportion.large.colonies, "proportion_large_colonies.csv")
